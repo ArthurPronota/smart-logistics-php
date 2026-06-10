@@ -1,0 +1,7 @@
+.git
+vendor
+postgres_data
+*.pdf
+*.log
+README1.md
+README2.md

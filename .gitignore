@@ -1,0 +1,12 @@
+vendor/
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+bootstrap/cache/*
+postgres_data/
+*.log
+README1.md
+README2.md
+.env
+.env.*
+!.env.example

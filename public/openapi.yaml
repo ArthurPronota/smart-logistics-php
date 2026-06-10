@@ -1,0 +1,244 @@
+openapi: 3.0.3
+info:
+  title: Notification Service API
+  version: 1.0.0
+  description: API for creating bulk SMS/Email notification batches and reading recipient notification history.
+servers:
+  - url: http://localhost:8080
+paths:
+  /health:
+    get:
+      summary: Check service health
+      operationId: getHealth
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: ok
+  /notifications/bulk:
+    post:
+      summary: Start bulk notification dispatch
+      operationId: startBulkNotification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkNotificationRequest"
+            examples:
+              sms:
+                summary: SMS notification
+                value:
+                  idempotency_key: route-update-001
+                  channel: sms
+                  priority: transactional
+                  message: Route changed
+                  recipient_ids:
+                    - "79001112233"
+              email:
+                summary: Email notification
+                value:
+                  idempotency_key: email-news-001
+                  channel: email
+                  priority: marketing
+                  message: New delivery conditions are available
+                  recipient_ids:
+                    - customer@example.com
+      responses:
+        "202":
+          description: Batch accepted and queued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkNotificationResponse"
+              example:
+                batch_id: 6c8d3c6a-8e7b-4cf1-ae5f-e7c904624b7d
+                notification_ids:
+                  - a19fc566-d28f-44a8-b552-7dfd8a7d7a34
+                duplicate: false
+        "200":
+          description: Duplicate idempotency key, existing batch returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkNotificationResponse"
+              example:
+                batch_id: 6c8d3c6a-8e7b-4cf1-ae5f-e7c904624b7d
+                notification_ids:
+                  - a19fc566-d28f-44a8-b552-7dfd8a7d7a34
+                duplicate: true
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                unsupportedChannel:
+                  value:
+                    error: Unsupported channel.
+                missingFields:
+                  value:
+                    error: idempotency_key, message and recipient_ids are required.
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Rate limit exceeded.
+  /subscribers/{recipientId}/notifications:
+    get:
+      summary: Get notification history for recipient
+      operationId: getRecipientNotifications
+      parameters:
+        - name: recipientId
+          in: path
+          required: true
+          description: Recipient identifier. For SMS it can be a phone number, for Email it can be an email address.
+          schema:
+            type: string
+          examples:
+            phone:
+              value: "79001112233"
+            email:
+              value: customer@example.com
+      responses:
+        "200":
+          description: Notification history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecipientNotificationsResponse"
+              example:
+                items:
+                  - id: a19fc566-d28f-44a8-b552-7dfd8a7d7a34
+                    batch_id: 6c8d3c6a-8e7b-4cf1-ae5f-e7c904624b7d
+                    recipient_id: "79001112233"
+                    channel: sms
+                    priority: transactional
+                    message: Route changed
+                    status: delivered
+                    attempts: 1
+                    provider_message_id: sms_a19fc566
+                    error: null
+                    created_at: "2026-06-10 08:00:00"
+                    updated_at: "2026-06-10 08:00:02"
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          example: ok
+    BulkNotificationRequest:
+      type: object
+      required:
+        - idempotency_key
+        - channel
+        - message
+        - recipient_ids
+      properties:
+        idempotency_key:
+          type: string
+          description: Unique request key used for idempotency.
+          example: route-update-001
+        channel:
+          type: string
+          enum: [sms, email]
+          example: sms
+        priority:
+          type: string
+          enum: [transactional, normal, marketing]
+          default: normal
+          example: transactional
+        message:
+          type: string
+          example: Route changed
+        recipient_ids:
+          type: array
+          minItems: 1
+          items:
+            type: string
+          example:
+            - "79001112233"
+    BulkNotificationResponse:
+      type: object
+      required:
+        - batch_id
+        - notification_ids
+        - duplicate
+      properties:
+        batch_id:
+          type: string
+          format: uuid
+        notification_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        duplicate:
+          type: boolean
+          description: True when the same idempotency key was already processed.
+    RecipientNotificationsResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Notification"
+    Notification:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        batch_id:
+          type: string
+          format: uuid
+        recipient_id:
+          type: string
+        channel:
+          type: string
+          enum: [sms, email]
+        priority:
+          type: string
+          enum: [transactional, normal, marketing]
+        message:
+          type: string
+        status:
+          type: string
+          enum: [queued, sent, delivered, dropped]
+        attempts:
+          type: integer
+        provider_message_id:
+          type: string
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          nullable: true
+          example: "2026-06-10 08:00:00"
+        updated_at:
+          type: string
+          nullable: true
+          example: "2026-06-10 08:00:02"
+    ErrorResponse:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string

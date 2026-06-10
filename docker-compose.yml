@@ -1,0 +1,67 @@
+services:
+  app:
+    build: .
+    command: php artisan serve --host=0.0.0.0 --port=8080
+    ports:
+      - "8080:8080"
+    environment:
+      APP_ENV: local
+      DATABASE_DSN: pgsql:host=postgres;port=5432;dbname=notifications
+      DATABASE_USER: notifications
+      DATABASE_PASSWORD: notifications
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      - postgres
+      - rabbitmq
+      - redis
+
+  worker:
+    build: .
+    command: php artisan notifications:work
+    environment:
+      APP_ENV: local
+      DATABASE_DSN: pgsql:host=postgres;port=5432;dbname=notifications
+      DATABASE_USER: notifications
+      DATABASE_PASSWORD: notifications
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      - app
+      - postgres
+      - rabbitmq
+      - redis
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: notifications
+      POSTGRES_USER: notifications
+      POSTGRES_PASSWORD: notifications
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:
